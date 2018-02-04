@@ -67,20 +67,4 @@ func TestTokenize(t *testing.T) {
 			t.Errorf("Expecting '%#v', got '%#v'", c.result, res)
 		}
 	}
-	errorCases := []struct {
-		input   string
-		message string
-	}{
-	/*		{"((", "Non matching parenthesis"},
-			{"))", "Non matching parenthesis"},
-			{"(  +", "Incomplete operation"},
-					{"( + + )","Invalid operation"},
-					{"( 1 + + )","Invalid operation"},*/
-	}
-	for _, c := range errorCases {
-		res, err := tokenize(c.input)
-		if err == nil {
-			t.Errorf("Expected error on %s, got: %s", c.message, res)
-		}
-	}
 }

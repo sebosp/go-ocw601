@@ -33,7 +33,7 @@ func tokenize(exp string) ([]string, error) {
 	for _, expCharOrd := range exp {
 		literalEnd++
 		expChar := string(expCharOrd)
-		if expChar == " " || expChar == `\n` {
+		if expChar == " " || expChar == "\n" {
 			res, err := substr(exp, literalStart, literalEnd-1)
 			literalStart = literalEnd
 			if err != nil {
@@ -63,16 +63,33 @@ func tokenize(exp string) ([]string, error) {
 }
 
 func main() {
-	Root := &Node{Value: `.`}
+	env := make(map[string]float64)
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter text: ")
-	text, _ := reader.ReadString('\n')
-	fmt.Println(text)
-	res, err := tokenize(text)
-	if err != nil {
-		fmt.Printf("Got error %s", err)
-	} else {
-		fmt.Printf("Result = %#v", res)
+	text := ""
+	output := 0.0
+	for {
+		Root := &Node{Value: ""}
+		fmt.Printf("%% ")
+		text, _ = reader.ReadString('\n')
+		if text == "quit\n" {
+			break
+		}
+		res, err := tokenize(text)
+		if err != nil {
+			fmt.Printf("Tokenize error %s\n", err)
+			continue
+		}
+		err = Root.BuildTokenTree(res)
+		if err != nil {
+			fmt.Printf("BuildTokenTree error %s\n", err)
+			continue
+		}
+		output, err = Root.RunTree(env)
+		if err != nil {
+			fmt.Printf("RunTree error %s\n", err)
+			continue
+		}
+		fmt.Printf("result: %f\n", output)
+		fmt.Printf("env = %+v\n", env)
 	}
-	err = Root.BuildTokenTree(res)
 }
