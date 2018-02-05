@@ -8,10 +8,11 @@ import (
 
 // Node specifies a tree structure that will have the math tree stored
 type Node struct {
-	Value string
-	Left  *Node
-	Right *Node
-	Top   *Node
+	tokens []string
+	Value  string
+	Left   *Node
+	Right  *Node
+	Top    *Node
 }
 
 // Insert sets a value, first filling left, then right
@@ -29,14 +30,40 @@ func (n *Node) Insert(value string) (*Node, error) {
 	return nil, fmt.Errorf("Node is full")
 }
 
-func (n *Node) printLeaves(depth int) {
-	if n.Left != nil {
-		n.Left.printLeaves(depth + 1)
+// String returns the state of the tree
+func (n *Node) String() string {
+	ret := ""
+	switch n.Value {
+	case `+`, `-`, `*`, `/`, `=`:
+		switch n.Value {
+		case `+`:
+			ret = "Sum("
+		case `-`:
+			ret = "Diff("
+		case `*`:
+			ret = "Prod("
+		case `/`:
+			ret = "Quot("
+		case `=`:
+			ret = "Assign("
+		}
+		if n.Left != nil {
+			ret += n.Left.String()
+		}
+		ret += ","
+		if n.Right != nil {
+			ret += n.Right.String()
+		}
+	default:
+		val, err := strconv.ParseFloat(n.Value, 64)
+		if err != nil {
+			ret = "Var(" + n.Value
+		} else {
+			ret = "Num(" + fmt.Sprintf("%f", val)
+		}
 	}
-	fmt.Printf(" '%s'[%d] ", n.Value, depth)
-	if n.Right != nil {
-		n.Right.printLeaves(depth + 1)
-	}
+	ret += ")"
+	return ret
 }
 
 func (n *Node) hasUnsetOperands() bool {
@@ -56,20 +83,14 @@ func (n *Node) hasUnsetOperands() bool {
 	return false
 }
 
-// Print the state of the tree
-func (n *Node) Print() {
-	n.printLeaves(0)
-	fmt.Println("")
-}
-
-// BuildTokenTree based on the expTokens input, which is
+// BuildTokenTree based on the 'tokens' root definition, which is
 // the output from tokenize
-func (n *Node) BuildTokenTree(expTokens []string) error {
+func (n *Node) BuildTokenTree() error {
 	temp := n
 	pos := 0
 	err := errors.New("Placeholder error")
 	openParens := 0
-	for _, token := range expTokens {
+	for _, token := range n.tokens {
 		switch token {
 		case `(`:
 			temp, err = temp.Insert("")
@@ -123,7 +144,7 @@ func (n *Node) BuildTokenTree(expTokens []string) error {
 }
 
 // RunTree recurses through the tree to resolve it
-func (n *Node) RunTree(env map[string]float64) (float64, error) {
+func (n *Node) RunTree(env map[string]*Node) (float64, error) {
 	err := errors.New("Placeholder error")
 	switch n.Value {
 	case `=`:
@@ -133,10 +154,24 @@ func (n *Node) RunTree(env map[string]float64) (float64, error) {
 		if n.Left == nil || n.Right == nil {
 			return 0.0, fmt.Errorf("Not enough operands")
 		}
-		if env[fmt.Sprintf("%s", n.Left.Value)], err = n.Right.RunTree(env); err != nil {
-			return 0.0, err
+		// We need to drop the outer containing parens and the left val assign: '(','x','=', so the length of the array must be more than 4
+		if len(n.tokens) < 5 {
+			return 0.0, fmt.Errorf("Not enough operands")
 		}
-		return env[fmt.Sprintf("%s", n.Left.Value)], nil
+		envRoot, exists := env[n.Left.Value]
+		if exists || envRoot == nil {
+			// Overwrite the current ref.
+			env[n.Left.Value] = &Node{Value: "", tokens: n.tokens[3 : len(n.tokens)-1]}
+			envRoot = env[n.Left.Value]
+		}
+		if envRoot.Value == "" {
+			envRoot.BuildTokenTree()
+		}
+		envOut, envErr := envRoot.RunTree(env)
+		if envErr != nil {
+			return 0.0, fmt.Errorf("env[%s] failed: %s", n.Left.Value, envErr)
+		}
+		return envOut, nil
 	case `+`, `-`, `*`, `/`:
 		left := 0.0
 		right := 0.0
@@ -145,11 +180,11 @@ func (n *Node) RunTree(env map[string]float64) (float64, error) {
 		}
 		left, err = n.Left.RunTree(env)
 		if err != nil {
-			return 0.0, fmt.Errorf("Error operating Left")
+			return 0.0, fmt.Errorf("Error on left operand: %s", err)
 		}
 		right, err = n.Right.RunTree(env)
 		if err != nil {
-			return 0.0, fmt.Errorf("Error operating Right")
+			return 0.0, fmt.Errorf("Error on right operand: %s", err)
 		}
 		switch n.Value {
 		case `+`:
@@ -168,15 +203,20 @@ func (n *Node) RunTree(env map[string]float64) (float64, error) {
 		val := 0.0
 		val, err = strconv.ParseFloat(n.Value, 64)
 		if err != nil {
-			// XXX: Add support for recursive resolution
-			envVal, exists := env[n.Value]
-			if exists {
-				return envVal, nil
+			envRoot, exists := env[n.Value]
+			if !exists || envRoot == nil {
+				return 0.0, fmt.Errorf("env[%s] unset", n.Value)
 			}
-		} else {
-			return val, err
+			if envRoot.Value == "" {
+				envRoot.BuildTokenTree()
+			}
+			envOut, envErr := envRoot.RunTree(env)
+			if envErr != nil {
+				return 0.0, fmt.Errorf("Unable to resolve env[%s]: %s", n.Value, envErr)
+			}
+			return envOut, nil
 		}
-		return 0.0, fmt.Errorf("Unable to resolve: '%s'", n.Value)
+		return val, nil
 	}
 	return 0.0, fmt.Errorf("Unexpected end of function reach on n.Value = '%s'", n.Value)
 }

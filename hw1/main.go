@@ -63,12 +63,11 @@ func tokenize(exp string) ([]string, error) {
 }
 
 func main() {
-	env := make(map[string]float64)
+	env := make(map[string]*Node)
 	reader := bufio.NewReader(os.Stdin)
 	text := ""
 	output := 0.0
 	for {
-		Root := &Node{Value: ""}
 		fmt.Printf("%% ")
 		text, _ = reader.ReadString('\n')
 		if text == "quit\n" {
@@ -79,7 +78,8 @@ func main() {
 			fmt.Printf("Tokenize error %s\n", err)
 			continue
 		}
-		err = Root.BuildTokenTree(res)
+		Root := &Node{Value: "", tokens: res}
+		err = Root.BuildTokenTree()
 		if err != nil {
 			fmt.Printf("BuildTokenTree error %s\n", err)
 			continue
